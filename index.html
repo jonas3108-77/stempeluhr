@@ -3,11 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Digitale Stempeluhr</title>
+    <title>Stempeluhr</title>
     <link rel="icon" href="cleverhublogo.png" type="image/png">
+    <!-- EmailJS Bibliothek für den E-Mail-Versand direkt aus dem Browser -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; background-color: #f4f4f9; display: flex; flex-direction: column; align-items: center; margin-top: 40px; }
-        .container { background: white; padding: 25px 40px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: center; max-width: 450px; width: 100%; }
+        .container { background: white; padding: 25px 40px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: center; max-width: 450px; width: 100%; position: relative; }
         #clock { font-size: 2.8rem; font-weight: bold; margin: 15px 0; color: #333; }
         
         .user-box { background: #eef5ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #b6d4fe; }
@@ -16,7 +18,7 @@
         .btn-change { background: none; border: none; color: #6c757d; text-decoration: underline; cursor: pointer; font-size: 0.85rem; margin-top: 5px; display: block; margin-left: auto; margin-right: auto; }
         
         .btn-group { display: flex; justify-content: space-around; margin-bottom: 20px; }
-        button.stamp-btn { padding: 12px 25px; font-size: 1.1rem; border: none; border-radius: 5px; cursor: pointer; color: white; font-weight: bold; }
+        button.stamp-btn { padding: 12px 25px; font-size: 1.1rem; border: none; border-radius: 5px; cursor: pointer; color: white; font-weight: bold; min-width: 140px; }
         .btn-kommen { background-color: #28a745; }
         .btn-gehen { background-color: #dc3545; }
         button.stamp-btn:hover:not(:disabled) { opacity: 0.9; }
@@ -27,6 +29,13 @@
         li { background: #eee; margin: 6px 0; padding: 10px; border-radius: 5px; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; }
         .name-tag { font-weight: bold; color: #0056b3; }
         .reset-btn { margin-top: 20px; background-color: #6c757d; font-size: 0.8rem; border: none; color: white; padding: 8px; border-radius: 5px; cursor: pointer; }
+
+        /* Modal Pop-up für Anwesenheitsprüfung */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; padding: 30px; border-radius: 10px; text-align: center; max-width: 350px; width: 90%; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .modal-content h3 { margin-top: 0; color: #dc3545; }
+        .modal-btn { background-color: #28a745; color: white; border: none; padding: 12px 24px; font-size: 1rem; font-weight: bold; border-radius: 5px; cursor: pointer; margin-top: 15px; }
+        .countdown-text { font-size: 1.2rem; font-weight: bold; color: #333; margin: 10px 0; }
     </style>
 </head>
 <body>
@@ -34,7 +43,7 @@
         <h2>Stempeluhr</h2>
         <div id="clock">00:00:00</div>
 
-        <!-- Bereich für die Namenseingabe / Profilanzeige -->
+        <!-- Bereich für Namenseingabe / Profilanzeige -->
         <div class="user-box" id="userBox">
             <div id="nameInputArea">
                 <p style="margin-top:0; font-weight:bold;">Bitte einmalig deinen Namen eingeben:</p>
@@ -61,6 +70,16 @@
         </div>
     </div>
 
+    <!-- Anwesenheitsprüfungs-Modal Popup -->
+    <div class="modal-overlay" id="presenceModal">
+        <div class="modal-content">
+            <h3>Anwesenheitsprüfung</h3>
+            <p>Bist du noch da?</p>
+            <div class="countdown-text">Verbleibende Zeit: <span id="modalCountdown">30</span>s</div>
+            <button class="modal-btn" onclick="besteatigeAnwesenheit()">Ja, ich bin noch da (OK)</button>
+        </div>
+    </div>
+
     <script>
         // Live-Uhr
         function updateClock() {
@@ -73,6 +92,12 @@
         // Daten aus LocalStorage laden
         let eintraege = JSON.parse(localStorage.getItem('stempelDaten')) || [];
         let meinName = localStorage.getItem('meinStempelName') || '';
+
+        // Timer-Variablen
+        let buttonTimerInterval = null;
+        let checkPresenceInterval = null;
+        let modalCountdownInterval = null;
+        let modalCountdownSeconds = 30;
 
         // Initialisierung des Namen-Bereichs
         function initUser() {
@@ -106,37 +131,69 @@
             initUser();
         }
 
-        // Name zurücksetzen/ändern
+        // Name zurücksetzen
         function nameAendern() {
             if (confirm("Möchtest du deinen gespeicherten Namen auf diesem Gerät ändern?")) {
                 localStorage.removeItem('meinStempelName');
                 meinName = '';
                 document.getElementById('userNameInput').value = '';
+                stoppeAnwesenheitsPruefung();
                 initUser();
             }
         }
 
-        // Status der Buttons für den gespeicherten Namen prüfen
+        // Status der Buttons & 1-Minute-Sperre prüfen
         function updateButtons() {
             const btnKommen = document.getElementById('btnKommen');
             const btnGehen = document.getElementById('btnGehen');
 
-            // Wenn noch kein Name eingerichtet ist, Buttons sperren
             if (!meinName) {
                 btnKommen.disabled = true;
                 btnGehen.disabled = true;
+                btnGehen.innerText = 'Gehen';
                 return;
             }
 
-            // Letzten Eintrag von MIR suchen
             const letzterEintrag = eintraege.find(e => e.name.toLowerCase() === meinName.toLowerCase());
 
             if (letzterEintrag && letzterEintrag.typ === 'Kommen') {
                 btnKommen.disabled = true;
-                btnGehen.disabled = false;
+                
+                // 1-Minuten-Sperre prüfen (60.000 Millisekunden)
+                const kommenZeit = letzterEintrag.timestamp || 0;
+                const verstricheneZeit = Date.now() - kommenZeit;
+                const mindestWartezeit = 60000; // 1 Minute in ms
+
+                if (verstricheneZeit < mindestWartezeit) {
+                    btnGehen.disabled = true;
+                    const verbleibendSekunden = Math.ceil((mindestWartezeit - verstricheneZeit) / 1000);
+                    btnGehen.innerText = `Gehen (${verbleibendSekunden}s)`;
+
+                    // Countdown auf dem Button jede Sekunde aktualisieren
+                    if (!buttonTimerInterval) {
+                        buttonTimerInterval = setInterval(updateButtons, 1000);
+                    }
+                } else {
+                    btnGehen.disabled = false;
+                    btnGehen.innerText = 'Gehen';
+                    if (buttonTimerInterval) {
+                        clearInterval(buttonTimerInterval);
+                        buttonTimerInterval = null;
+                    }
+                }
+
+                // 5-Minuten-Anwesenheitsprüfung starten
+                starteAnwesenheitsPruefung();
+
             } else {
                 btnKommen.disabled = false;
                 btnGehen.disabled = true;
+                btnGehen.innerText = 'Gehen';
+                if (buttonTimerInterval) {
+                    clearInterval(buttonTimerInterval);
+                    buttonTimerInterval = null;
+                }
+                stoppeAnwesenheitsPruefung();
             }
         }
 
@@ -146,11 +203,101 @@
 
             const now = new Date();
             const zeitstempel = now.toLocaleString('de-DE');
+            const timestamp = now.getTime(); // Exakter Timestamp für Zeitberechnungen
             
-            eintraege.unshift({ name: meinName, typ: typ, zeit: zeitstempel });
+            eintraege.unshift({ name: meinName, typ: typ, zeit: zeitstempel, timestamp: timestamp });
             localStorage.setItem('stempelDaten', JSON.stringify(eintraege));
             
             renderLog();
+        }
+
+        // --- 5-MINUTEN ANWESENHEITSPRÜFUNG ---
+        function starteAnwesenheitsPruefung() {
+            if (checkPresenceInterval) return; // Bereits aktiv
+
+            // Alle 5 Minuten (300.000 ms) Pop-up anzeigen
+            // (Hinweis: Zum Testen kannst du 300000 kurz durch z. B. 10000 für 10 Sekunden ersetzen)
+            checkPresenceInterval = setInterval(() => {
+                zeigeAnwesenheitsModal();
+            }, 300000);
+        }
+
+        function stoppeAnwesenheitsPruefung() {
+            if (checkPresenceInterval) {
+                clearInterval(checkPresenceInterval);
+                checkPresenceInterval = null;
+            }
+            versteckeAnwesenheitsModal();
+        }
+
+        function zeigeAnwesenheitsModal() {
+            const modal = document.getElementById('presenceModal');
+            modal.style.display = 'flex';
+            modalCountdownSeconds = 30;
+            document.getElementById('modalCountdown').innerText = modalCountdownSeconds;
+
+            if (modalCountdownInterval) clearInterval(modalCountdownInterval);
+
+            modalCountdownInterval = setInterval(() => {
+                modalCountdownSeconds--;
+                document.getElementById('modalCountdown').innerText = modalCountdownSeconds;
+
+                if (modalCountdownSeconds <= 0) {
+                    // Zeit abgelaufen -> Nicht bestätigt!
+                    verfehlteAnwesenheit();
+                }
+            }, 1000);
+        }
+
+        function besteatigeAnwesenheit() {
+            versteckeAnwesenheitsModal();
+            // Reset des 5-Minuten Timers
+            stoppeAnwesenheitsPruefung();
+            starteAnwesenheitsPruefung();
+        }
+
+        function versteckeAnwesenheitsModal() {
+            const modal = document.getElementById('presenceModal');
+            modal.style.display = 'none';
+            if (modalCountdownInterval) {
+                clearInterval(modalCountdownInterval);
+                modalCountdownInterval = null;
+            }
+        }
+
+        function verfehlteAnwesenheit() {
+            versteckeAnwesenheitsModal();
+            alert("Anwesenheit nicht bestätigt! Benachrichtigung wegen Arbeitszeitbetrug wird gesendet.");
+            
+            // Automatisch Gehen stempeln
+            stempeln('Gehen');
+
+            // E-Mail Auslöser
+            sendeEMailArbeitszeitbetrug();
+        }
+
+        // --- E-MAIL VERSAND (EmailJS) ---
+        function sendeEMailArbeitszeitbetrug() {
+            // Um echte E-Mails kostenlos aus GitHub Pages zu senden, erstelle ein Konto bei emailjs.com 
+            // und füge deine 3 IDs hier ein:
+            const serviceID = "YOUR_SERVICE_ID";
+            const templateID = "YOUR_TEMPLATE_ID";
+            const publicKey = "YOUR_PUBLIC_KEY";
+
+            const templateParams = {
+                to_email: "kevinkunde2006@gmail.com",
+                from_name: meinName,
+                subject: "Arbeitszeitbetrug",
+                message: `Meldung: Der Mitarbeiter ${meinName} hat um ${new Date().toLocaleString('de-DE')} die 5-Minuten-Anwesenheitsprüfung ("Noch da?") nicht bestätigt. Verdacht auf Arbeitszeitbetrug.`
+            };
+
+            if (window.emailjs && serviceID !== "YOUR_SERVICE_ID") {
+                emailjs.send(serviceID, templateID, templateParams, publicKey)
+                    .then(() => console.log("E-Mail wegen Arbeitszeitbetrugs gesendet."))
+                    .catch((err) => console.error("Fehler beim E-Mail-Versand:", err));
+            } else {
+                console.warn("EmailJS ist nicht eingerichtet. E-Mail-Inhalt für kevinkunde2006@gmail.com:", templateParams);
+            }
         }
 
         // Historie rendern
@@ -175,6 +322,7 @@
             if(confirm("Möchtest du die gesamte Historie wirklich löschen?")) {
                 localStorage.removeItem('stempelDaten');
                 eintraege = [];
+                stoppeAnwesenheitsPruefung();
                 renderLog();
             }
         }
