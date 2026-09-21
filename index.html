@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digitale Stempeluhr</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; display: flex; flex-direction: column; align-items: center; margin-top: 50px; }
+        .container { background: white; padding: 20px 40px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; }
+        #clock { font-size: 3rem; font-weight: bold; margin: 20px 0; color: #333; }
+        .btn-group { display: flex; justify-content: space-around; margin-bottom: 20px; }
+        button { padding: 10px 20px; font-size: 1rem; border: none; border-radius: 5px; cursor: pointer; color: white; font-weight: bold; }
+        .btn-kommen { background-color: #28a745; }
+        .btn-gehen { background-color: #dc3545; }
+        button:hover { opacity: 0.9; }
+        #log { margin-top: 20px; text-align: left; }
+        ul { list-style-type: none; padding: 0; }
+        li { background: #eee; margin: 5px 0; padding: 10px; border-radius: 5px; font-size: 0.9rem; display: flex; justify-content: space-between; }
+        .reset-btn { margin-top: 20px; background-color: #6c757d; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Stempeluhr</h2>
+        <div id="clock">00:00:00</div>
+        
+        <div class="btn-group">
+            <button class="btn-kommen" onclick="stempeln('Kommen')">Kommen</button>
+            <button class="btn-gehen" onclick="stempeln('Gehen')">Gehen</button>
+        </div>
+        
+        <div id="log">
+            <h3>Letzte Einträge</h3>
+            <ul id="logList"></ul>
+            <button class="reset-btn" onclick="datenLoeschen()">Historie löschen</button>
+        </div>
+    </div>
+
+    <script>
+        // Live-Uhr aktualisieren
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString('de-DE');
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Daten aus dem Speicher laden oder leeres Array erstellen
+        let eintraege = JSON.parse(localStorage.getItem('stempelDaten')) || [];
+
+        // Funktion für das Stempeln
+        function stempeln(typ) {
+            const now = new Date();
+            const zeitstempel = now.toLocaleString('de-DE');
+            
+            // Neuen Eintrag oben zur Liste hinzufügen
+            eintraege.unshift({ typ: typ, zeit: zeitstempel });
+            
+            // Im Browser speichern
+            localStorage.setItem('stempelDaten', JSON.stringify(eintraege));
+            renderLog();
+        }
+
+        // Funktion zum Anzeigen der Liste
+        function renderLog() {
+            const list = document.getElementById('logList');
+            list.innerHTML = '';
+            
+            // Nur die letzten 5 Einträge anzeigen, damit es übersichtlich bleibt
+            eintraege.slice(0, 5).forEach(eintrag => {
+                const li = document.createElement('li');
+                li.innerHTML = `<strong>${eintrag.typ}</strong> <span>${eintrag.zeit}</span>`;
+                list.appendChild(li);
+            });
+        }
+
+        // Funktion zum Löschen der Daten
+        function datenLoeschen() {
+            if(confirm("Möchtest du alle Einträge wirklich löschen?")) {
+                localStorage.removeItem('stempelDaten');
+                eintraege = [];
+                renderLog();
+            }
+        }
+
+        // Liste beim Start initial laden
+        renderLog();
+    </script>
+</body>
+</html>
