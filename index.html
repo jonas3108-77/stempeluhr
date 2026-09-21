@@ -12,7 +12,8 @@
         button { padding: 10px 20px; font-size: 1rem; border: none; border-radius: 5px; cursor: pointer; color: white; font-weight: bold; }
         .btn-kommen { background-color: #28a745; }
         .btn-gehen { background-color: #dc3545; }
-        button:hover { opacity: 0.9; }
+        button:hover:not(:disabled) { opacity: 0.9; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; opacity: 0.6; }
         #log { margin-top: 20px; text-align: left; }
         ul { list-style-type: none; padding: 0; }
         li { background: #eee; margin: 5px 0; padding: 10px; border-radius: 5px; font-size: 0.9rem; display: flex; justify-content: space-between; }
@@ -25,8 +26,8 @@
         <div id="clock">00:00:00</div>
         
         <div class="btn-group">
-            <button class="btn-kommen" onclick="stempeln('Kommen')">Kommen</button>
-            <button class="btn-gehen" onclick="stempeln('Gehen')">Gehen</button>
+            <button id="btnKommen" class="btn-kommen" onclick="stempeln('Kommen')">Kommen</button>
+            <button id="btnGehen" class="btn-gehen" onclick="stempeln('Gehen')">Gehen</button>
         </div>
         
         <div id="log">
@@ -45,19 +46,32 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // Daten aus dem Speicher laden oder leeres Array erstellen
+        // Daten aus dem Speicher laden
         let eintraege = JSON.parse(localStorage.getItem('stempelDaten')) || [];
+
+        // Status der Buttons basierend auf dem letzten Eintrag steuern
+        function updateButtons() {
+            const btnKommen = document.getElementById('btnKommen');
+            const btnGehen = document.getElementById('btnGehen');
+            const letzterEintrag = eintraege[0];
+
+            if (letzterEintrag && letzterEintrag.typ === 'Kommen') {
+                btnKommen.disabled = true;
+                btnGehen.disabled = false;
+            } else {
+                btnKommen.disabled = false;
+                btnGehen.disabled = true;
+            }
+        }
 
         // Funktion für das Stempeln
         function stempeln(typ) {
             const now = new Date();
             const zeitstempel = now.toLocaleString('de-DE');
             
-            // Neuen Eintrag oben zur Liste hinzufügen
             eintraege.unshift({ typ: typ, zeit: zeitstempel });
-            
-            // Im Browser speichern
             localStorage.setItem('stempelDaten', JSON.stringify(eintraege));
+            
             renderLog();
         }
 
@@ -66,12 +80,13 @@
             const list = document.getElementById('logList');
             list.innerHTML = '';
             
-            // Nur die letzten 5 Einträge anzeigen, damit es übersichtlich bleibt
             eintraege.slice(0, 5).forEach(eintrag => {
                 const li = document.createElement('li');
                 li.innerHTML = `<strong>${eintrag.typ}</strong> <span>${eintrag.zeit}</span>`;
                 list.appendChild(li);
             });
+
+            updateButtons();
         }
 
         // Funktion zum Löschen der Daten
@@ -83,7 +98,7 @@
             }
         }
 
-        // Liste beim Start initial laden
+        // Initialisierung beim Laden
         renderLog();
     </script>
 </body>
