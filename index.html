@@ -5,31 +5,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Digitale Stempeluhr</title>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f4f4f9; display: flex; flex-direction: column; align-items: center; margin-top: 50px; }
-        .container { background: white; padding: 20px 40px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; }
-        #clock { font-size: 3rem; font-weight: bold; margin: 20px 0; color: #333; }
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; display: flex; flex-direction: column; align-items: center; margin-top: 40px; }
+        .container { background: white; padding: 25px 40px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); text-align: center; max-width: 450px; width: 100%; }
+        #clock { font-size: 2.8rem; font-weight: bold; margin: 15px 0; color: #333; }
+        
+        .user-box { background: #eef5ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #b6d4fe; }
+        .user-box input { padding: 8px; font-size: 1rem; border: 1px solid #ccc; border-radius: 5px; margin-right: 5px; }
+        .btn-save { background-color: #0d6efd; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .btn-change { background: none; border: none; color: #6c757d; text-decoration: underline; cursor: pointer; font-size: 0.85rem; margin-top: 5px; display: block; margin-left: auto; margin-right: auto; }
+        
         .btn-group { display: flex; justify-content: space-around; margin-bottom: 20px; }
-        button { padding: 10px 20px; font-size: 1rem; border: none; border-radius: 5px; cursor: pointer; color: white; font-weight: bold; }
+        button.stamp-btn { padding: 12px 25px; font-size: 1.1rem; border: none; border-radius: 5px; cursor: pointer; color: white; font-weight: bold; }
         .btn-kommen { background-color: #28a745; }
         .btn-gehen { background-color: #dc3545; }
-        button:hover:not(:disabled) { opacity: 0.9; }
-        button:disabled { background-color: #cccccc; cursor: not-allowed; opacity: 0.6; }
+        button.stamp-btn:hover:not(:disabled) { opacity: 0.9; }
+        button.stamp-btn:disabled { background-color: #cccccc; cursor: not-allowed; opacity: 0.6; }
+        
         #log { margin-top: 20px; text-align: left; }
         ul { list-style-type: none; padding: 0; }
-        li { background: #eee; margin: 5px 0; padding: 10px; border-radius: 5px; font-size: 0.9rem; display: flex; justify-content: space-between; }
-        .reset-btn { margin-top: 20px; background-color: #6c757d; font-size: 0.8rem; }
+        li { background: #eee; margin: 6px 0; padding: 10px; border-radius: 5px; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; }
+        .name-tag { font-weight: bold; color: #0056b3; }
+        .reset-btn { margin-top: 20px; background-color: #6c757d; font-size: 0.8rem; border: none; color: white; padding: 8px; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
     <div class="container">
         <h2>Stempeluhr</h2>
         <div id="clock">00:00:00</div>
-        
-        <div class="btn-group">
-            <button id="btnKommen" class="btn-kommen" onclick="stempeln('Kommen')">Kommen</button>
-            <button id="btnGehen" class="btn-gehen" onclick="stempeln('Gehen')">Gehen</button>
+
+        <!-- Bereich für die Namenseingabe / Profilanzeige -->
+        <div class="user-box" id="userBox">
+            <div id="nameInputArea">
+                <p style="margin-top:0; font-weight:bold;">Bitte einmalig deinen Namen eingeben:</p>
+                <input type="text" id="userNameInput" placeholder="Dein Name">
+                <button class="btn-save" onclick="speichereName()">Speichern</button>
+            </div>
+            <div id="nameDisplayArea" style="display: none;">
+                Angemeldet als: <strong id="displayName" style="font-size: 1.1rem; color: #0d6efd;"></strong>
+                <button class="btn-change" onclick="nameAendern()">Name ändern</button>
+            </div>
         </div>
         
+        <!-- Stempel-Buttons -->
+        <div class="btn-group">
+            <button id="btnKommen" class="stamp-btn btn-kommen" onclick="stempeln('Kommen')">Kommen</button>
+            <button id="btnGehen" class="stamp-btn btn-gehen" onclick="stempeln('Gehen')">Gehen</button>
+        </div>
+        
+        <!-- Historie -->
         <div id="log">
             <h3>Letzte Einträge</h3>
             <ul id="logList"></ul>
@@ -38,7 +61,7 @@
     </div>
 
     <script>
-        // Live-Uhr aktualisieren
+        // Live-Uhr
         function updateClock() {
             const now = new Date();
             document.getElementById('clock').innerText = now.toLocaleTimeString('de-DE');
@@ -46,14 +69,66 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // Daten aus dem Speicher laden
+        // Daten aus LocalStorage laden
         let eintraege = JSON.parse(localStorage.getItem('stempelDaten')) || [];
+        let meinName = localStorage.getItem('meinStempelName') || '';
 
-        // Status der Buttons basierend auf dem letzten Eintrag steuern
+        // Initialisierung des Namen-Bereichs
+        function initUser() {
+            const inputArea = document.getElementById('nameInputArea');
+            const displayArea = document.getElementById('nameDisplayArea');
+            const displayName = document.getElementById('displayName');
+
+            if (meinName) {
+                inputArea.style.display = 'none';
+                displayArea.style.display = 'block';
+                displayName.innerText = meinName;
+            } else {
+                inputArea.style.display = 'block';
+                displayArea.style.display = 'none';
+            }
+            updateButtons();
+        }
+
+        // Name festlegen
+        function speichereName() {
+            const input = document.getElementById('userNameInput');
+            const eingabe = input.value.trim();
+
+            if (!eingabe) {
+                alert("Bitte gib einen Namen ein!");
+                return;
+            }
+
+            meinName = eingabe;
+            localStorage.setItem('meinStempelName', meinName);
+            initUser();
+        }
+
+        // Name zurücksetzen/ändern
+        function nameAendern() {
+            if (confirm("Möchtest du deinen gespeicherten Namen auf diesem Gerät ändern?")) {
+                localStorage.removeItem('meinStempelName');
+                meinName = '';
+                document.getElementById('userNameInput').value = '';
+                initUser();
+            }
+        }
+
+        // Status der Buttons für den gespeicherten Namen prüfen
         function updateButtons() {
             const btnKommen = document.getElementById('btnKommen');
             const btnGehen = document.getElementById('btnGehen');
-            const letzterEintrag = eintraege[0];
+
+            // Wenn noch kein Name eingerichtet ist, Buttons sperren
+            if (!meinName) {
+                btnKommen.disabled = true;
+                btnGehen.disabled = true;
+                return;
+            }
+
+            // Letzten Eintrag von MIR suchen
+            const letzterEintrag = eintraege.find(e => e.name.toLowerCase() === meinName.toLowerCase());
 
             if (letzterEintrag && letzterEintrag.typ === 'Kommen') {
                 btnKommen.disabled = true;
@@ -64,41 +139,47 @@
             }
         }
 
-        // Funktion für das Stempeln
+        // Stempeln ausführen
         function stempeln(typ) {
+            if (!meinName) return;
+
             const now = new Date();
             const zeitstempel = now.toLocaleString('de-DE');
             
-            eintraege.unshift({ typ: typ, zeit: zeitstempel });
+            eintraege.unshift({ name: meinName, typ: typ, zeit: zeitstempel });
             localStorage.setItem('stempelDaten', JSON.stringify(eintraege));
             
             renderLog();
         }
 
-        // Funktion zum Anzeigen der Liste
+        // Historie rendern
         function renderLog() {
             const list = document.getElementById('logList');
             list.innerHTML = '';
             
-            eintraege.slice(0, 5).forEach(eintrag => {
+            eintraege.slice(0, 7).forEach(eintrag => {
                 const li = document.createElement('li');
-                li.innerHTML = `<strong>${eintrag.typ}</strong> <span>${eintrag.zeit}</span>`;
+                li.innerHTML = `
+                    <span><span class="name-tag">${eintrag.name}</span> (${eintrag.typ})</span>
+                    <span>${eintrag.zeit}</span>
+                `;
                 list.appendChild(li);
             });
 
             updateButtons();
         }
 
-        // Funktion zum Löschen der Daten
+        // Daten löschen
         function datenLoeschen() {
-            if(confirm("Möchtest du alle Einträge wirklich löschen?")) {
+            if(confirm("Möchtest du die gesamte Historie wirklich löschen?")) {
                 localStorage.removeItem('stempelDaten');
                 eintraege = [];
                 renderLog();
             }
         }
 
-        // Initialisierung beim Laden
+        // Start
+        initUser();
         renderLog();
     </script>
 </body>
